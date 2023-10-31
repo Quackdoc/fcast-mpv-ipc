@@ -88,6 +88,14 @@ pub fn update_state2() -> PlaybackUpdateMessage {
     return update_playback();
 }
 
+pub fn check_for_mpv() -> bool {
+        let mpv = Mpv::connect(MPVSOCKET);
+        match mpv {
+            Ok(_) => return true,
+            Err(_) => return false,
+        }
+}
+
 fn update_playback() -> PlaybackUpdateMessage {
     let mpv = Mpv::connect(MPVSOCKET);
     match mpv {
@@ -97,10 +105,10 @@ fn update_playback() -> PlaybackUpdateMessage {
             //    println!("returning idle");
             //    return PlaybackUpdateMessage::new(0, 0);
             //} else {
-            let playback_time: f64 = mpv.get_property("playback-time").unwrap();
+            let playback_time: f64 = mpv.get_property("playback-time").unwrap_or_default();
             //let paused: bool = mpv.get_property("pause").unwrap();
             let time_state = playback_time as u64;
-            let paused_bool: bool = mpv.get_property("pause").unwrap();
+            let paused_bool: bool = mpv.get_property("pause").unwrap_or_default();
             //let paused_state = PlayState::new();
             let mut paused_state: u8;
             if paused_bool == true {

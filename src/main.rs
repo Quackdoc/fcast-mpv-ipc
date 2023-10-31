@@ -12,21 +12,23 @@ use models::{VolumeUpdateMessage, PlaybackUpdateMessage};
 use fcastmanager::main_handler;
 
 fn main() {
-    let listener = TcpListener::bind("0.0.0.0:46899").unwrap(); //TODO: config
-    println!("Server listening on port 46899"); //TODO: config
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                println!("New connection: {}", stream.peer_addr().unwrap());
-                thread::spawn(move|| {
-                    main_handler(stream)
-                });
-            }
-            Err(e) => {
-                println!("Error: {}", e);
+    loop {
+        let listener = TcpListener::bind("0.0.0.0:46899").unwrap(); //TODO: config
+        println!("Server listening on port 46899"); //TODO: config
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    println!("New connection: {}", stream.peer_addr().unwrap());
+                    //thread::spawn(move|| {
+                        main_handler(stream)
+                    //});
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
             }
         }
+        // close the socket server
+        //drop(listener);
     }
-    // close the socket server
-    drop(listener);
 }

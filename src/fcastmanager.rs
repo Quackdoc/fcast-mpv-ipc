@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::models::{HEADER,Opcode, VolumeUpdateMessage, PlaybackUpdateMessage};
 use crate::command::{play, seek, setvol, pause, resume, stop};
-use crate::state::update_state2;
+use crate::state::{update_state2, check_for_mpv};
 
 //const LENGTH_BYTES: usize = 4;
 const MAXIMUM_PACKET_LENGTH: usize = 35000;
@@ -22,23 +22,24 @@ pub fn main_handler(stream: TcpStream) {
 fn listen2(mut stream: TcpStream) {
     let mut data = [0 as u8; MAXIMUM_PACKET_LENGTH];
     let mut combined_data: Vec<u8> = vec![];
-
+    stream.set_read_timeout(Some(Duration::new(0, 250))).unwrap();
+    //stream.set_write_timeout(Some(Duration::new(0, 250))).unwrap();
+    //stream.set_nonblocking(false).unwrap();
     loop {
-        println!("loop start");
-        println!("\n");
+        //println!("loop start");
+        //println!("\n");
         
         //let dur = time::Duration::from_millis(250);
-        stream.set_read_timeout(Some(Duration::new(1, 0))).unwrap();
         let input = stream.read(&mut data);
             match input {
             Ok (size) => {
             if size == 4 {
-                println!("usize is 4");
+                //println!("usize is 4");
                 combined_data.extend_from_slice(&data[0..4]);
             } else if size == 0 {
                 println!("usize is 0, empty buffer");
             } else {
-                println!("usize is at least {}", size);
+                //println!("usize is at least {}", size);
                 combined_data.extend_from_slice(&data[0..size]);
                 println!("combined_data length in main loop is: {}", combined_data.len() );
                 //println!("data usize is: {}", size);
@@ -76,7 +77,7 @@ fn listen2(mut stream: TcpStream) {
                             thread::spawn(move|| {setvol(read_body(&combined_data, header_info.size))});
                             },
                 }
-                println!("finished match");
+                //println!("finished match");
                 stream.flush().unwrap();
                 combined_data = vec![];
                 println!("combined data");
@@ -87,21 +88,36 @@ fn listen2(mut stream: TcpStream) {
             },
         }
 
-        println!("crafting response");
-        let response = update_state2();
-        let response_json = serde_json::to_string(&response).unwrap();
-        //let response_txt = format!("{{ time: {}, state: {} }}", response.time, response.state );
-        //let response_txt = "{ time: {}, state: {} }";
-        //println!("\{ time: {}, state: {} \}", response.time, response.state );
-        println!("sending json data: {}", response_json);
-        let msg_respond = response_json.as_bytes();
-        let data_respond = craft_data(msg_respond, Opcode::PlaybackUpdate);
-        println!("responding with the raw data {:?}", data_respond);
-        stream.write(&data_respond).unwrap();
-        thread::sleep(time::Duration::from_millis(250));
-        println!("send the data");
+        if check_for_mpv() {
+            let data_respond = craft_response();
+            //println!("sending json data: {:?}", data_respond);
+            let status = stream.write(&data_respond);
+            match status {
+                Ok(size) => println!("Write succsess usize is {}", size),
+                Err(err) => println!("error is {:?}", err),
+            }
+            stream.flush().unwrap();
+            thread::sleep(time::Duration::from_secs(1));
+        } else {
+            println!("not replying");
+        }
+        thread::sleep(time::Duration::from_millis(1000));
+        
     }
 
+}
+
+fn craft_response() -> Vec<u8> {
+    //println!("crafting response");
+    let response = update_state2();
+    //let response_json = serde_json::to_string(&response).unwrap();
+    let response_txt = format!("{{ time: {}, state: {} }}", response.time, response.state );
+    //let response_txt = "{ time: 1, state: 1 }";
+    println!("{{ time: {}, state: {} }}", response.time, response.state );
+    
+    let msg_respond = response_txt.as_bytes();
+    let data_respond = craft_data(msg_respond, Opcode::PlaybackUpdate);
+    return data_respond;
 }
 
 fn craft_data(message: &[u8], opcode: Opcode) -> Vec<u8> {
@@ -122,17 +138,17 @@ fn read_header(data: &[u8]) -> HEADER {
     let header_size_bytes = &data[0..4];
     let header_size = u32::from_ne_bytes(header_size_bytes.try_into().unwrap());
     let header_op = data[4];
-    
+    println!("Opcode is: {:?}", Opcode::from_u8(header_op));
     return HEADER::new(header_size, Opcode::from_u8(header_op));
 }
 
 fn read_body(data: &[u8], size: u32 ) -> Value {
-    println!("recieved size is: {}", size);
+    //println!("recieved size is: {}", size);
     let body = &data[5..size as usize + 4]; //ofset 5 bytes - 1 as per spec
     let json_data_string = std::str::from_utf8(body).unwrap();
     //println!("BODY: {:?}", &json_data_string);
     let json_data: Value = serde_json::from_str(json_data_string).unwrap();
-    println!("Ready the incomming body");
-    println!("JSON: {:?}", json_data);
+    //println!("Ready the incomming body");
+    println!("Incomming Data: {:?}", json_data);
     return json_data;
 }
